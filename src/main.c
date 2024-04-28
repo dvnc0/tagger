@@ -3,10 +3,13 @@
 #include <string.h>
 #include <sqlite3.h>
 #include <unistd.h>
+#include <database.h>
+#include <time.h>
 
 int makeDatabase();
 int showTables();
 int addSnippet(int argc, char *argv[]);
+char *generateUniqueId();
 
 int main(int argc, char *argv[]) {
 	
@@ -36,18 +39,23 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 
-int makeDatabase() {
-	sqlite3 *db;
-	char *zErrMsg = 0;
-	int rc;
+// return must be freed
+char *generateUniqueId() {
+    srand(time(NULL));
+    char *uniqueId = malloc(9 * sizeof(char));
+    if (uniqueId != NULL) {
+        for (int i = 0; i < 8; i++) {
+            uniqueId[i] = 'a' + (rand() % 26);
+        }
+        uniqueId[8] = '\0';
+    }
+    return uniqueId;
+}
 
+int makeDatabase() {
 	if (access("tagger.db", F_OK) != 0) {
+
 		printf("Creating database\n");
-		rc = sqlite3_open("tagger.db", &db);
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-			return 1;
-		}
 
 		char snippetTable[200] = "CREATE TABLE snippets (id INTEGER PRIMARY KEY AUTOINCREMENT, snippet TEXT, unique_id TEXT);";
 		char tagsTable[100] = "CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, tag TEXT, snippet_id TEXT);";
@@ -55,36 +63,16 @@ int makeDatabase() {
 		char index1[100] = "CREATE INDEX unique_id_index ON snippets (unique_id);";
 		char index2[100] = "CREATE INDEX snippet_id_index ON tags (snippet_id);";
 
-		rc = sqlite3_exec(db, snippetTable, 0, 0, &zErrMsg);
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "SQL error: %s\n", zErrMsg);
-			sqlite3_free(zErrMsg);
-		}
-
-		rc = sqlite3_exec(db, tagsTable, 0, 0, &zErrMsg);
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "SQL error: %s\n", zErrMsg);
-			sqlite3_free(zErrMsg);
-		}
-
-		rc = sqlite3_exec(db, index1, 0, 0, &zErrMsg);
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "SQL error: %s\n", zErrMsg);
-			sqlite3_free(zErrMsg);
-		}
-
-		rc = sqlite3_exec(db, index2, 0, 0, &zErrMsg);
-		if (rc != SQLITE_OK) {
-			fprintf(stderr, "SQL error: %s\n", zErrMsg);
-			sqlite3_free(zErrMsg);
-		}
-
-		sqlite3_close(db);
+		executeQuery(snippetTable);
+		executeQuery(tagsTable);
+		executeQuery(index1);
+		executeQuery(index2);
 	}
 
 	return 0;
 }
 
+// todo
 int showTables() {
 	sqlite3 *db;
 	sqlite3_stmt *stmt;
@@ -119,44 +107,32 @@ int addSnippet(int argc, char *argv[]) {
 		return 1;
 	}
 
-	char uniqueId[20];
-
-	sprintf(uniqueId, "%d", rand());
-
-	sqlite3 *db;
-	sqlite3_stmt *stmt;
-	char *zErrMsg = 0;
-	int rc;
-
-	rc = sqlite3_open("tagger.db", &db);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-		return 1;
-	}
+	char *uniqueId = generateUniqueId();
 
 	char *sql = "INSERT INTO snippets (snippet, unique_id) VALUES (?, ?);";
-	sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+	
+	char *params[] = {argv[2], uniqueId};
+	
+	int tagCount = argc - 3;
 
-	sqlite3_bind_text(stmt, 1, argv[2], -1, SQLITE_STATIC);
-	sqlite3_bind_text(stmt, 2, uniqueId, -1, SQLITE_STATIC);
-
-	sqlite3_step(stmt);
-
-	sqlite3_finalize(stmt);
+	char *tags[tagCount];
+	int n = 0;
 
 	for (int i = 3; i < argc; i++) {
-		sql = "INSERT INTO tags (tag, snippet_id) VALUES (?, ?);";
-		sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-
-		sqlite3_bind_text(stmt, 1, argv[i], -1, SQLITE_STATIC);
-		sqlite3_bind_text(stmt, 2, uniqueId, -1, SQLITE_STATIC);
-
-		sqlite3_step(stmt);
-
-		sqlite3_finalize(stmt);
+		tags[n] = argv[i];
+		n++;
 	}
 
-	sqlite3_close(db);
+	insert(sql, params);
 
+	sql = "INSERT INTO tags (tag, snippet_id) VALUES (?, ?);";
+
+	for (int i = 0; i < tagCount; i++) {
+		char *tagParams[] = {tags[i], uniqueId};
+		insert(sql, tagParams);
+	}
+
+	free(uniqueId);
+	
 	return 0;
 }
