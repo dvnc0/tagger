@@ -7,9 +7,10 @@
 #include <time.h>
 
 int makeDatabase();
-int showTables();
 int addSnippet(int argc, char *argv[]);
 char *generateUniqueId();
+int getSnippet(char *snippet);
+int getAllTags();
 
 int main(int argc, char *argv[]) {
 	
@@ -25,12 +26,12 @@ int main(int argc, char *argv[]) {
 		addSnippet(argc, argv);
 	} else if (strcmp(argv[1], "search") == 0) {
 		printf("Search snippet\n");
+		getSnippet(argv[2]);
 	} else if (strcmp(argv[1], "delete") == 0) {
 		printf("Delete snippet\n");
-	} else if (strcmp(argv[1], "list") == 0) {
-		printf("List snippets\n");
-	} else if(strcmp(argv[1], "tables") == 0){
-		showTables();
+	} else if (strcmp(argv[1], "tags") == 0) {
+		printf("List tags\n");
+		getAllTags();
 	} else {
 		printf("Unknown command\n");
 		return 1;
@@ -72,34 +73,6 @@ int makeDatabase() {
 	return 0;
 }
 
-// todo
-int showTables() {
-	sqlite3 *db;
-	sqlite3_stmt *stmt;
-	char *zErrMsg = 0;
-	int rc;
-
-	rc = sqlite3_open("tagger.db", &db);
-	if (rc != SQLITE_OK) {
-		fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-		return 1;
-	}
-
-	char *sql = "SELECT name FROM sqlite_master WHERE type='table';";
-
-	sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
-	int s;
-	while ((s = sqlite3_step(stmt)) == SQLITE_ROW) {
-		printf("%s\n", sqlite3_column_text(stmt, 0));
-	}
-
-	sqlite3_finalize(stmt);
-
-	sqlite3_close(db);
-
-	return 0;
-}
-
 int addSnippet(int argc, char *argv[]) {
 
 	if (argc < 4) {
@@ -134,5 +107,41 @@ int addSnippet(int argc, char *argv[]) {
 
 	free(uniqueId);
 	
+	return 0;
+}
+
+int getSnippet(char *snippet) {
+
+	char *sql = "SELECT * FROM snippets JOIN tags ON snippets.unique_id = tags.snippet_id WHERE snippet LIKE ? OR tag LIKE ?;";
+
+	char *params[] = {snippet, snippet};
+
+	struct Result result = fetchAll(sql, params);
+
+	for (int i = 0; i < result.size; i++) {
+		if (strcmp(result.rows[i].field_name, "snippet") == 0) {
+			printf("%s\n", result.rows[i].value);
+		}
+	}
+
+	free(result.rows);
+
+	return 0;
+}
+
+int getAllTags() {
+	char *sql = "SELECT * FROM tags;";
+	char *params[] = {NULL};
+
+	struct Result result = fetchAll(sql, params);
+
+	for (int i = 0; i < result.size; i++) {
+		if (strcmp(result.rows[i].field_name, "tag") == 0) {
+			printf("%s\n", result.rows[i].value);
+		}
+	}
+
+	free(result.rows);
+
 	return 0;
 }

@@ -66,3 +66,55 @@ int insert(char *query, char *params[]) {
 
 	return 0;
 }
+
+// free result.rows
+// allow params to be NULL
+struct Result fetchAll(char *sql, char *params[]) {
+	sqlite3 *db = getDatabaseConnection();
+	sqlite3_stmt *stmt;
+	int rc;
+
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
+
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Can't prepare statement: %s\n", sqlite3_errmsg(db));
+		closeDatabaseConnection(db);
+		exit(1);
+	}
+
+	int sizeOfParams;
+    for (sizeOfParams = 0; params[sizeOfParams] != NULL; sizeOfParams++);
+
+    for (int i = 0; i < sizeOfParams; i++) {
+        sqlite3_bind_text(stmt, i + 1, params[i], -1, SQLITE_STATIC);
+    }
+
+	int columns = sqlite3_column_count(stmt);
+	struct Result result;
+	result.size = 0;
+	result.capacity = INITIAL_ROW_CAPACITY;
+
+	result.rows = malloc(sizeof(struct Row) * result.capacity);
+
+	while (sqlite3_step(stmt) == SQLITE_ROW) {
+		for (int i = 0; i < columns; i++) {
+			if (result.size >= result.capacity) {
+				result.capacity *= 2;
+				result.rows = realloc(result.rows, result.capacity * sizeof(struct Row));
+				if (result.rows == NULL) {
+					fprintf(stderr, "Memory allocation failed\n");
+					exit(1);
+				}
+			}
+			// create row data and add to result
+			result.rows[result.size].field_name = strdup(sqlite3_column_name(stmt, i));
+    		result.rows[result.size].value = strdup(sqlite3_column_text(stmt, i));
+    		result.size++;
+		}
+	}
+
+	sqlite3_finalize(stmt);
+	closeDatabaseConnection(db);
+
+	return result;
+}
