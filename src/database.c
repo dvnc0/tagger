@@ -68,7 +68,6 @@ int insert(char *query, char *params[]) {
 }
 
 // free result.rows
-// allow params to be NULL
 struct Result fetchAll(char *sql, char *params[]) {
 	sqlite3 *db = getDatabaseConnection();
 	sqlite3_stmt *stmt;
@@ -106,7 +105,6 @@ struct Result fetchAll(char *sql, char *params[]) {
 					exit(1);
 				}
 			}
-			// create row data and add to result
 			result.rows[result.size].field_name = strdup(sqlite3_column_name(stmt, i));
     		result.rows[result.size].value = strdup(sqlite3_column_text(stmt, i));
     		result.size++;
